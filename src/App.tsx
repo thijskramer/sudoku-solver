@@ -1,3 +1,4 @@
+import clsx from "clsx";
 import { useState } from "react";
 
 type Cell = {
@@ -103,19 +104,19 @@ const getOptions = (cell: Cell, cells: Cell[]) => {
     return [];
   }
   return Array.from({ length: 9 }, (_, v) => v + 1).filter((v) =>
-    cellValueIsValid(cell, cells, v)
+    cellValueIsValid(cell, cells, v),
   );
 };
 
 const cellValueIsValid = (
   cell: Cell,
   cells: Cell[],
-  attemptedValue: number
+  attemptedValue: number,
 ) => {
   const row = cells.filter((c) => c.y === cell.y && c.x !== cell.x);
   const column = cells.filter((c) => c.x === cell.x && c.y !== cell.y);
   const group = cells.filter(
-    (c) => c.group === cell.group && c.index !== cell.index
+    (c) => c.group === cell.group && c.index !== cell.index,
   );
   if (
     row
@@ -123,7 +124,6 @@ const cellValueIsValid = (
       .filter(Boolean)
       .includes(attemptedValue)
   ) {
-    // console.log(`Nope, ${attemptedValue} is already in the same row.`);
     return false;
   }
   if (
@@ -132,7 +132,6 @@ const cellValueIsValid = (
       .filter(Boolean)
       .includes(attemptedValue)
   ) {
-    // console.log(`Nope, ${attemptedValue} is already in the same column.`);
     return false;
   }
   if (
@@ -141,18 +140,121 @@ const cellValueIsValid = (
       .filter(Boolean)
       .includes(attemptedValue)
   ) {
-    // console.log(`Nope, ${attemptedValue} is already in the same group.`);
     return false;
   }
   return true;
 };
 
+class Grid {
+  _cells: Cell[] = [];
+  constructor(cells: Cell[]) {
+    this._cells = cells;
+  }
+  get cells() {
+    return this._cells;
+  }
+  updateCell(cell: Cell, value: number) {
+    const idx = this._cells.findIndex((x) => x.index === cell.index);
+    const newCells = [
+      ...this._cells.slice(0, idx),
+      {
+        ...this._cells[idx],
+        value,
+      },
+      ...this._cells.slice(idx + 1),
+    ];
+    newCells.forEach((cell) => {
+      cell.options = getOptions(cell, newCells);
+    });
+    this._cells = newCells;
+  }
+}
+
+function getSolution(allCells: Cell[]) {
+  // if cells with single option, apply that.
+  // if no cells with single option, check if row/col/group
+  // contains cell with unique option, apply that.
+  console.log("retrieving solution...");
+  const t1 = performance.now();
+  const grid = new Grid(allCells);
+
+  function fillSingles() {
+    const cellsWithSingleOption = grid.cells
+      .filter((c) => c.value === null)
+      .filter((c) => c.options.length === 1);
+    if (cellsWithSingleOption.length > 0) {
+      cellsWithSingleOption.forEach((c) => {
+        grid.updateCell(c, c.options[0]);
+      });
+    }
+    return cellsWithSingleOption.length;
+  }
+
+  function fillGroups() {
+    const groups = Array.from(new Set(grid.cells.map((x) => x.group)));
+    groups.forEach((group) => {
+      // foreach group, find cells in that group...
+      const groupCells = grid.cells.filter((x) => x.group === group);
+      solveForGroup(groupCells);
+    });
+  }
+  function fillColumns() {
+    Array.from({ length: 9 }, (_, v) => v + 1).forEach((num) => {
+      // foreach group, find cells in that group...
+      const cellsInColumn = grid.cells.filter((x) => x.x === num);
+      solveForGroup(cellsInColumn);
+    });
+  }
+  function fillRows() {
+    Array.from({ length: 9 }, (_, v) => v + 1).forEach((num) => {
+      const cellsInRow = grid.cells.filter((x) => x.y === num);
+      solveForGroup(cellsInRow);
+    });
+  }
+
+  function solveForGroup(groupCells: Cell[]) {
+    // each cell: do I have a unique option?
+    const cells = groupCells.filter((x) => x.value === null);
+    cells.forEach((cell) => {
+      const singularCellOption = cell.options.filter((co) => {
+        const numCellsWithThisOption = cells.filter((gc) =>
+          gc.options.includes(co),
+        ).length;
+        return numCellsWithThisOption === 1;
+      });
+      if (singularCellOption.length > 0) {
+        grid.updateCell(cell, singularCellOption[0]);
+      }
+    });
+  }
+
+  let i = 0;
+  do {
+    const singles = fillSingles();
+    if (singles < 1) {
+      fillGroups();
+      fillColumns();
+      fillRows();
+    }
+    i++;
+    if (grid.cells.every((x) => x.value !== null)) {
+      console.log(`w00t! Found solution in ${i} iterations.`);
+      break;
+    }
+    if (i > 100) {
+      console.log("needed to many iterations, exiting...");
+      break;
+    }
+  } while (i < 999);
+  const t2 = performance.now();
+  console.log(`It took ${Math.round(t2 - t1)}ms`);
+  return grid.cells;
+}
+
 function App() {
   const [selectedCell, setSelectedCell] = useState(-1);
   const [cells, setCells] = useState<Cell[]>(getInitialCells());
   const [showOptions, toggleOptions] = useState(false);
-  const [logs, setLogs] = useState<string[]>([]);
-  const [steps, setSteps] = useState(1);
 
   const selectCell = (idx: number) => {
     setSelectedCell(idx === selectedCell ? -1 : idx);
@@ -199,83 +301,13 @@ function App() {
     });
   };
 
-  const writeLog = (msg: string) => {
-    setLogs((curr) => [...curr, `${steps}. ${msg}`]);
-  };
-
   const solve = () => {
-    // if cells with single option, apply that.
-    // if no cells with single option, check if row/col/group
-    // contains cell with unique option, apply that.
-    setSteps((s) => (s += 1));
-    function applySingles() {
-      const cellsWithSingleOption = cells
-        .filter((c) => c.value === null)
-        .filter((c) => c.options.length === 1);
-      console.log(cellsWithSingleOption.length);
-      if (cellsWithSingleOption.length > 0) {
-        cellsWithSingleOption.forEach((c) => {
-          setCellValue(c.options[0], c);
-          writeLog(`Applied ${c.options[0]} to cell R${c.y}C${c.x}. (Single)`);
-        });
-      }
-      return cellsWithSingleOption.length;
-    }
-    function applySquares() {
-      const groups = Array.from(new Set(cells.map((x) => x.group)));
-      groups.forEach((group) => {
-        // foreach group, find cells in that group...
-        const groupCells = cells.filter((x) => x.group === group);
-        hoeba(groupCells, "square");
-      });
-    }
-    function applyColumns() {
-      Array.from({ length: 9 }, (_, v) => v + 1).forEach((col) => {
-        // foreach group, find cells in that group...
-        const groupCells = cells.filter((x) => x.x === col);
-        hoeba(groupCells, "column");
-      });
-    }
-    function applyRows() {
-      Array.from({ length: 9 }, (_, v) => v + 1).forEach((row) => {
-        // foreach group, find cells in that group...
-        const groupCells = cells.filter((x) => x.y === row);
-        hoeba(groupCells, "row");
-      });
-    }
-
-    function hoeba(groupCells: Cell[], boundary: string) {
-      // each cell: do I have a unique option?
-      const cells = groupCells.filter((x) => x.value === null);
-      cells.forEach((cell) => {
-        const huu = cell.options.filter((co) => {
-          const numCellsWithThisOption = cells.filter((gc) =>
-            gc.options.includes(co)
-          ).length;
-          if (numCellsWithThisOption > 1) {
-            return false;
-          }
-          return true;
-        });
-        if (huu.length > 0) {
-          setCellValue(huu[0], cell);
-          writeLog(
-            `Applied ${huu[0]} to cell R${cell.y}C${cell.x}. (${boundary})`
-          );
-        }
-      });
-    }
-
-    const singles = applySingles();
-    if (singles < 1) {
-      applySquares();
-      applyRows();
-      applyColumns();
-    }
+    const solution = getSolution(cells);
+    setCells(solution);
   };
 
   return (
-    <div className="p-4 grid grid-cols-[auto_1fr] gap-10">
+    <div className="grid grid-cols-[auto_1fr] gap-10 p-4">
       <div>
         <div
           className="grid grid-cols-[repeat(9,40px)] focus:outline-none"
@@ -284,24 +316,21 @@ function App() {
         >
           {cells.map((c) => (
             <div
-              className={`w-10 h-10 grid place-content-center relative text-xl ${getBorder(
-                c.index
+              className={`relative grid h-10 w-10 place-content-center text-xl ${getBorder(
+                c.index,
               )} ${c.index === selectedCell ? "bg-yellow-100" : "bg-white"}`}
               key={c.index}
               onClick={() => selectCell(c.index)}
             >
               <span
-                className={`${
-                  c.isPrefilled
-                    ? "font-bold text-black"
-                    : "font-light text-gray-800"
-                } ${
-                  c.value !== null && !c.isPrefilled
-                    ? cellValueIsValid(c, cells, c.value)
-                      ? ""
-                      : "text-red-600"
-                    : ""
-                }`}
+                className={clsx({
+                  "font-bold text-black": c.isPrefilled,
+                  "font-light text-gray-800": !c.isPrefilled,
+                  "text-red-600":
+                    c.value !== null &&
+                    !c.isPrefilled &&
+                    !cellValueIsValid(c, cells, c.value),
+                })}
               >
                 {c.value}
               </span>
@@ -313,25 +342,26 @@ function App() {
             </div>
           ))}
         </div>
-        <div className="pt-4 flex gap-2">
+        <div className="flex gap-2 pt-4">
           <button
             onClick={() => toggleOptions((o) => !o)}
             type="button"
-            className="bg-blue-600 text-white px-2 py-2"
+            className="bg-blue-600 px-2 py-2 text-white"
           >
             {showOptions ? "Hide" : "Show"} options
           </button>
           <button
             onClick={() => reset()}
             type="button"
-            className="bg-blue-600 text-white px-2 py-2"
+            className="bg-blue-600 px-2 py-2 text-white"
           >
             Reset
           </button>
           <button
             onClick={solve}
+            disabled={cells.every((x) => x.value !== null)}
             type="button"
-            className="bg-blue-600 text-white px-2 py-2"
+            className="bg-blue-600 px-2 py-2 text-white disabled:bg-blue-300"
           >
             Solve
           </button>
@@ -339,11 +369,6 @@ function App() {
             ? "Well done!"
             : ""}
         </div>
-      </div>
-      <div className="border border-blue-600 bg-white max-h-screen overflow-scroll">
-        {logs.map((x, i) => (
-          <div key={i}>{x}</div>
-        ))}
       </div>
     </div>
   );
