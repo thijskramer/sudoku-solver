@@ -1,10 +1,10 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import Twins from "./Twins";
+import Mix from "./Mix";
 import "./index.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <Twins />
+    <Mix />
   </React.StrictMode>,
 );

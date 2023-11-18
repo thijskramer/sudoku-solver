@@ -300,11 +300,10 @@ class Grid {
         ",",
       )} of cell R${cellWithTwoOptions.y}C${cellWithTwoOptions.x} for that.`,
     );
-    this.#specialCell = { ...cellWithTwoOptions };
     const correctOption = cellWithTwoOptions.options.find((option) => {
       const copyOfCells = [...this.#_cells].map((x) => structuredClone(x));
       const tempGrid = new Grid(copyOfCells);
-      tempGrid.updateCell(this.#specialCell, option);
+      tempGrid.updateCell(cellWithTwoOptions, option);
 
       while (tempGrid.unsolved.length > 0) {
         tempGrid.solve();
@@ -332,14 +331,12 @@ class Grid {
       return false;
     }
     const singles = this.fillSingles();
-    if (singles === 0) {
-      const groups = this.fillGroups();
-      const cols = this.fillColumns();
-      const rows = this.fillRows();
-      const solvedWithSudoku = groups + cols + rows;
-      if (solvedWithSudoku === 0) {
-        this.bruteForce();
-      }
+    const groups = this.fillGroups();
+    const cols = this.fillColumns();
+    const rows = this.fillRows();
+    const solvedWithSudoku = groups + cols + rows + singles;
+    if (solvedWithSudoku === 0) {
+      this.bruteForce();
     }
     return true;
   }
